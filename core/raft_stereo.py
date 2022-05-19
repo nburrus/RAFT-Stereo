@@ -38,6 +38,8 @@ class RAFTStereo(nn.Module):
         else:
             self.fnet = BasicEncoder(output_dim=256, norm_fn='instance', downsample=args.n_downsample)
 
+        self.iters = args.valid_iters
+
     def freeze_bn(self):
         for m in self.modules():
             if isinstance(m, nn.BatchNorm2d):
@@ -67,7 +69,7 @@ class RAFTStereo(nn.Module):
         return up_flow.reshape(N, D, factor*H, factor*W)
 
 
-    def forward(self, image1, image2, iters=12, flow_init=None, test_mode=False):
+    def forward(self, image1, image2, flow_init=None, test_mode=True):
         """ Estimate optical flow between pair of frames """
 
         image1 = (2 * (image1 / 255.0) - 1.0).contiguous()
@@ -105,7 +107,7 @@ class RAFTStereo(nn.Module):
             coords1 = coords1 + flow_init
 
         flow_predictions = []
-        for itr in range(iters):
+        for itr in range(self.iters):
             coords1 = coords1.detach()
             corr = corr_fn(coords1) # index correlation volume
             flow = coords1 - coords0
@@ -123,7 +125,7 @@ class RAFTStereo(nn.Module):
             coords1 = coords1 + delta_flow
 
             # We do not need to upsample or output intermediate results in test_mode
-            if test_mode and itr < iters-1:
+            if test_mode and itr < self.iters-1:
                 continue
 
             # upsample predictions
